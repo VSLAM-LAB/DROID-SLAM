@@ -3,10 +3,10 @@ import torch
 import torch.nn.functional as F
 
 from .chol import block_solve, schur_solve
-import geom.projective_ops as pops
 
 from torch_scatter import scatter_sum
 
+import droid_slam.geom.projective_ops as pops
 
 # utility functions for scattering ops
 def safe_scatter_add_mat(A, ii, jj, n, m):

@@ -1,12 +1,11 @@
 import numpy as np
 import os.path as osp
+from scipy.spatial.transform import Rotation
 
 import torch
 from lietorch import SE3
 
-import geom.projective_ops as pops
-from scipy.spatial.transform import Rotation
-
+import droid_slam.geom.projective_ops as pops
 
 def parse_list(filepath, skiprows=0):
     """ read list data """
