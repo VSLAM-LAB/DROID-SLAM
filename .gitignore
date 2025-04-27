@@ -155,4 +155,5 @@ cache
 data
 figures/*.pdf
 
-
+install_droidslam-dev.txt
+archive/
