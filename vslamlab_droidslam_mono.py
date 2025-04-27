@@ -145,12 +145,12 @@ def main():
     keyFrameTrajectory_txt = os.path.join(args.exp_folder, args.exp_it.zfill(5) + '_KeyFrameTrajectory' + '.txt')
     
     with open(keyFrameTrajectory_txt, 'w') as file:
-    	for i_pose, pose in enumerate(traj_est):
-    	    ts = timestamps[i_pose]
+        for i_pose, pose in enumerate(traj_est):
+            ts = timestamps[i_pose]
             tx, ty, tz = pose[0], pose[1], pose[2]
-    	    qx, qy, qz, qw = pose[3], pose[4], pose[5], pose[6]
-    	    line = str(ts) + " " + str(tx) + " " + str(ty) + " " + str(tz) + " " + str(qx) + " " + str(qy) + " " + str(qz) + " " + str(qw) + "\n"
-    	    file.write(line)
+            qx, qy, qz, qw = pose[3], pose[4], pose[5], pose[6]
+            line = str(ts) + " " + str(tx) + " " + str(ty) + " " + str(tz) + " " + str(qx) + " " + str(qy) + " " + str(qz) + " " + str(qw) + "\n"
+            file.write(line)
 
 if __name__ == '__main__':
     main()
