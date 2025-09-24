@@ -47,7 +47,7 @@ class Droid:
     def load_weights(self, weights):
         """ load trained model weights """
 
-        print(weights)
+        print(f"\n[droid.py] load_weights: {weights}")
         self.net = DroidNet()
         state_dict = OrderedDict([
             (k.replace("module.", ""), v) for (k, v) in torch.load(weights).items()])
