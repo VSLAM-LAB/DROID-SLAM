@@ -11,6 +11,9 @@ from lietorch import SE3
 
 import droid_slam.geom.projective_ops as pops
 
+CV2GL = np.eye(4)
+CV2GL[:3,:3] = np.diag([1, -1, -1])   # flip Y and Z
+
 CAM_POINTS = np.array([
         [ 0,   0,   0],
         [-1,  -1, 1.5],
@@ -121,7 +124,7 @@ def droid_visualization(video, device="cuda:0"):
 
                 ### add camera actor ###
                 cam_actor = create_camera_actor(True)
-                cam_actor.transform(pose)
+                cam_actor.transform(CV2GL @ pose)
                 vis.add_geometry(cam_actor)
                 droid_visualization.cameras[ix] = cam_actor
 
@@ -130,13 +133,16 @@ def droid_visualization(video, device="cuda:0"):
                 clr = images[i].reshape(-1, 3)[mask].cpu().numpy()
                 
                 ## add point actor ###
-                point_actor = create_point_actor(pts, clr)
+                point_actor = create_point_actor(pts @ CV2GL[:3,:3].T, clr)
                 vis.add_geometry(point_actor)
                 droid_visualization.points[ix] = point_actor
 
             # hack to allow interacting with vizualization during inference
             if len(droid_visualization.cameras) >= droid_visualization.warmup:
-                cam = vis.get_view_control().convert_from_pinhole_camera_parameters(cam)
+                vc = vis.get_view_control()
+                cam = vc.convert_to_pinhole_camera_parameters()  # refresh after any resize
+                vc.convert_from_pinhole_camera_parameters(cam, allow_arbitrary=True)
+                #cam = vis.get_view_control().convert_from_pinhole_camera_parameters(cam)
 
             droid_visualization.ix += 1
             vis.poll_events()
