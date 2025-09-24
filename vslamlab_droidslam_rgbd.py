@@ -12,58 +12,67 @@ import cv2
 import sys
 import os
 
-sys.path.append('droid_slam')
-from droid_slam.droid import Droid
+sys.path.append('droid_slam') 
+from droid_slam.droid import Droid 
 
-timestamps = []
+timestamps = [] 
 
-def show_image(image):
-    image = image.permute(1, 2, 0).cpu().numpy()
-    cv2.imshow('image', image / 255.0)
+def show_image(image): 
+    image = image.permute(1, 2, 0).cpu().numpy() 
+    cv2.imshow('image', image / 255.0) 
     cv2.waitKey(1)
 
 def load_calibration(calibration_yaml: Path):
     fs = cv2.FileStorage(str(calibration_yaml), cv2.FILE_STORAGE_READ)
-    def read_real(key: str) -> float:
-        node = fs.getNode(key)
-        return float(node.real()) if not node.empty() else 0.0
 
-    fx, fy, cx, cy = map(read_real, ["Camera0.fx", "Camera0.fy", "Camera0.cx", "Camera0.cy"])
-    k1, k2, p1, p2, k3 = map(read_real, ["Camera0.k1", "Camera0.k2", "Camera0.p1", "Camera0.p2", "Camera0.k3"])
+    def read_real(key: str, default: float = 0.0) -> float:
+        node = fs.getNode(key)
+        return float(node.real()) if node is not None and not node.empty() else default
+
+    fx, fy, cx, cy = [read_real(k) for k in ("Camera0.fx", "Camera0.fy", "Camera0.cx", "Camera0.cy")]
+    k1, k2, p1, p2, k3 = [read_real(k) for k in ("Camera0.k1", "Camera0.k2", "Camera0.p1", "Camera0.p2", "Camera0.k3")]
+    depth_factor = read_real("Depth0.factor", 1.0) or 1.0 
+
     fs.release()
 
     K = np.array([[fx, 0,  cx],
                   [0,  fy, cy],
-                  [0,  0,   1]], dtype=np.float32)
+                  [0,   0,  1]], dtype=np.float32)
     dist = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
     has_dist = not np.allclose(dist, 0.0)
-    return K, dist, has_dist
 
-def image_stream(sequence_path: Path, rgb_csv: Path, calibration_yaml: Path, target_pixels: int = 384*512):
-    """ image generator """
-    global timestamps
-    K, dist, has_dist = load_calibration(calibration_yaml)
+    return K, dist, has_dist, float(depth_factor)
 
-    # Load rgb images
-    df = pd.read_csv(rgb_csv)       
+def image_stream(sequence_path: Path, rgb_csv: Path, calibration_yaml: Path, use_depth: bool = False, target_pixels: int = 384*512):
+    """ image generator """ 
+    global timestamps 
+    K, dist, has_dist, depth_factor = load_calibration(calibration_yaml)
+
+    # Load rgb images 
+    df = pd.read_csv(rgb_csv)
     image_list = df['path_rgb0'].to_list()
-    timestamps = df['ts_rgb0 (s)'].to_list()
-
-    # Undistort and resize images
-    for t, imrel in enumerate(image_list):
+    timestamps = df['ts_rgb0 (s)'].to_list() 
+    depth_list = df['path_depth0'].to_list() 
+    
+    # Undistort and resize images 
+    for t, imrel in enumerate(image_list): 
         impath = sequence_path / imrel
-        image = cv2.imread(impath)
-        if has_dist:
-            image = cv2.undistort(image, K, dist)
+        depthpath = sequence_path / depth_list[t]
 
-        h0, w0, _ = image.shape
+        image = cv2.imread(impath) 
+        depth = cv2.imread(depthpath, cv2.IMREAD_ANYDEPTH) / depth_factor
+
+        h0, w0, _ = image.shape 
         h1 = int(h0 * np.sqrt(target_pixels / (h0 * w0)))
-        w1 = int(w0 * np.sqrt(target_pixels / (h0 * w0)))
+        w1 = int(w0 * np.sqrt(target_pixels / (h0 * w0))) 
 
         image = cv2.resize(image, (w1, h1), interpolation=cv2.INTER_AREA)
+        image = image[:h1-h1%8, :w1-w1%8] 
+        image = torch.as_tensor(image).permute(2, 0, 1) 
 
-        image = image[:h1-h1%8, :w1-w1%8]
-        image = torch.as_tensor(image).permute(2, 0, 1)
+        depth = torch.as_tensor(depth)
+        depth = F.interpolate(depth[None,None], (h1, w1)).squeeze() 
+        depth = depth[:h1-h1%8, :w1-w1%8] 
 
         intrinsics = torch.tensor([
             K[0,0] * (w1 / w0),
@@ -71,11 +80,14 @@ def image_stream(sequence_path: Path, rgb_csv: Path, calibration_yaml: Path, tar
             K[0,2] * (w1 / w0),
             K[1,2] * (h1 / h0)
         ], dtype=torch.float32)
-        
-        yield t, image[None], intrinsics.clone()
 
-def main():  
-    print("\nRunning vslamlab_droidslam_mono.py ...\n")  
+        if use_depth: 
+            yield t, image[None], depth, intrinsics.clone() 
+        else: 
+            yield t, image[None], intrinsics.clone()
+
+def main(): 
+    print("\nRunning vslamlab_droidslam_rgbd.py ...\n")  
 
     parser = argparse.ArgumentParser()
     
@@ -120,28 +132,28 @@ def main():
     args.backend_thresh = float(S.get('backend_thresh', 24.0))
     args.backend_radius = int(S.get('backend_radius', 2))
     args.backend_nms = int(S.get('backend_nms', 2))
-    args.stereo = False
-    args.depth = False
+    args.stereo = False 
+    args.depth = True
     args.disable_vis = not args.verbose
 
-    torch.multiprocessing.set_start_method('spawn')
-
-    droid = None
-    for (t, image, intrinsics) in tqdm(image_stream(args.sequence_path, args.rgb_csv, args.calibration_yaml)):
-        if t < args.t0:
-            continue
-
-        if verbose:
-            show_image(image[0])
-
-        if droid is None:
-            args.image_size = [image.shape[2], image.shape[3]]         
-            droid = Droid(args)
-        
-        droid.track(t, image, intrinsics=intrinsics)
-
-    traj_est = droid.terminate(image_stream(args.sequence_path, args.rgb_csv, args.calibration_yaml))
+    torch.multiprocessing.set_start_method('spawn') 
     
+    droid = None
+    for (t, image, depth, intrinsics) in tqdm(image_stream(args.sequence_path, args.rgb_csv, args.calibration_yaml, use_depth = True)): 
+        if t < args.t0: 
+            continue 
+
+        if verbose: 
+            show_image(image[0]) 
+
+        if droid is None: 
+            args.image_size = [image.shape[2], image.shape[3]] 
+            droid = Droid(args) 
+
+        droid.track(t, image, depth, intrinsics=intrinsics)
+    
+    traj_est = droid.terminate(image_stream(args.sequence_path, args.rgb_csv, args.calibration_yaml)) 
+
     keyframe_csv = args.exp_folder / f"{args.exp_it.zfill(5)}_KeyFrameTrajectory.csv"
     with open(keyframe_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -151,5 +163,6 @@ def main():
             tx, ty, tz, qx, qy, qz, qw = traj_est[i][:7]
             writer.writerow([ts, tx, ty, tz, qx, qy, qz, qw])
 
-if __name__ == '__main__':
+
+if __name__ == '__main__': 
     main()
