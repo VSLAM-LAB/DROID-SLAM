@@ -7,6 +7,7 @@ import numpy as np
 import argparse
 import torch
 import yaml
+import time
 import csv
 import cv2
 import sys
@@ -97,7 +98,7 @@ def main():
     parser.add_argument("--exp_folder", type=Path, required=True)
     parser.add_argument("--exp_it", type=str, default="0")
     parser.add_argument("--settings_yaml", type=Path, default=None)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--verbose", type=str, help="verbose")
     parser.add_argument("--upsample", action="store_true")
     parser.add_argument("--weights", type=Path, default=None)
 
@@ -134,7 +135,6 @@ def main():
     args.backend_nms = int(S.get('backend_nms', 2))
     args.stereo = False 
     args.depth = True
-    args.disable_vis = not args.verbose
 
     torch.multiprocessing.set_start_method('spawn') 
     
@@ -149,7 +149,8 @@ def main():
         if droid is None: 
             args.image_size = [image.shape[2], image.shape[3]] 
             droid = Droid(args) 
-
+            time.sleep(5)
+            
         droid.track(t, image, depth, intrinsics=intrinsics)
     
     traj_est = droid.terminate(image_stream(args.sequence_path, args.rgb_csv, args.calibration_yaml)) 

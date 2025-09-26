@@ -7,6 +7,7 @@ import numpy as np
 import argparse
 import torch
 import yaml
+import time
 import csv
 import cv2
 import sys
@@ -23,49 +24,34 @@ def show_image(image):
     cv2.waitKey(1)
 
 def load_calibration(calibration_yaml: Path):
-    
     fs = cv2.FileStorage(str(calibration_yaml), cv2.FILE_STORAGE_READ)
     def read_real(key: str) -> float:
         node = fs.getNode(key)
-        if node.empty():
-           return 0.0
-        return float(node.real())
-    
+        return float(node.real()) if not node.empty() else 0.0
+
     def read_int(key: str) -> int:
         node = fs.getNode(key)
         if node.empty():
            return 0.0
         return int(node.real())
-    
-    def read_mat(key: str):
-        node = fs.getNode(key)
-        return None if node.empty() else np.array(node.mat(), dtype=float)
-    
-    K_l = np.array([read_real("Camera0.fx"), 0.0, read_real("Camera0.cx"), 0.0, read_real("Camera0.fy"), read_real("Camera0.cy"), 0.0, 0.0, 1.0]).reshape(3,3)
-    d_l = np.array([read_real("Camera0.k1"),read_real("Camera0.k2"), read_real("Camera0.p1"), read_real("Camera0.p2"), read_real("Camera0.k3")])
-    R_l = read_mat("R_l")
-    P_l = read_mat("P_l")
-    map_l = cv2.initUndistortRectifyMap(K_l, d_l, R_l, P_l[:3,:3], (752, 480), cv2.CV_32F)
-    
-    K_r = np.array([read_real("Camera1.fx"), 0.0, read_real("Camera1.cx"), 0.0, read_real("Camera1.fy"), read_real("Camera1.cy"), 0.0, 0.0, 1.0]).reshape(3,3)
-    d_r = np.array([read_real("Camera1.k1"),read_real("Camera1.k2"), read_real("Camera1.p1"), read_real("Camera1.p2"), read_real("Camera1.k3")])
-    R_r = read_mat("R_r")
-    P_r = read_mat("P_r")
-    map_r = cv2.initUndistortRectifyMap(K_r, d_r, R_r, P_r[:3,:3], (752, 480), cv2.CV_32F)
-    
-    intrinsics_vec = [P_l[0,0], P_l[1,1], P_l[0,2], P_l[1,2]]
+
+    fx, fy, cx, cy = map(read_real, ["Camera0.fx", "Camera0.fy", "Camera0.cx", "Camera0.cy"])
 
     h0 = read_int("Camera0.h")
     w0 = read_int("Camera0.w")
 
     fs.release()
 
-    return map_l, map_r, intrinsics_vec, h0, w0
+    K = np.array([[fx, 0,  cx],
+                  [0,  fy, cy],
+                  [0,  0,   1]], dtype=np.float32)
+    return K, h0, w0
+
 
 def image_stream(sequence_path: Path, rgb_csv: Path, calibration_yaml: Path, use_stereo: bool = False, image_size=[320, 512]):
     """ image generator """ 
     global timestamps 
-    map_l, map_r, intrinsics_vec, ht0, wd0 = load_calibration(calibration_yaml)
+    K, ht0, wd0 = load_calibration(calibration_yaml)
 
     # Load rgb images
     df = pd.read_csv(rgb_csv)       
@@ -80,14 +66,16 @@ def image_stream(sequence_path: Path, rgb_csv: Path, calibration_yaml: Path, use
         if use_stereo and not os.path.isfile(imgR):
             continue
 
-        images = [cv2.remap(cv2.imread(imgL), map_l[0], map_l[1], interpolation=cv2.INTER_LINEAR)]
+        #images = [cv2.remap(cv2.imread(imgL), map_l[0], map_l[1], interpolation=cv2.INTER_LINEAR)]
+        images = [cv2.imread(imgL)]
         if use_stereo:
-            images += [cv2.remap(cv2.imread(imgR), map_r[0], map_r[1], interpolation=cv2.INTER_LINEAR)]
+            images += [cv2.imread(imgR)]
         
         images = torch.from_numpy(np.stack(images, 0))
         images = images.permute(0, 3, 1, 2).to("cuda:0", dtype=torch.float32)
         images = F.interpolate(images, image_size, mode="bilinear", align_corners=False)
         
+        intrinsics_vec = [K[0,0], K[1,1], K[0,2], K[1,2]]
         intrinsics = torch.as_tensor(intrinsics_vec).cuda()
         intrinsics[0] *= image_size[1] / wd0
         intrinsics[1] *= image_size[0] / ht0
@@ -107,7 +95,7 @@ def main():
     parser.add_argument("--exp_folder", type=Path, required=True)
     parser.add_argument("--exp_it", type=str, default="0")
     parser.add_argument("--settings_yaml", type=Path, default=None)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--verbose", type=str, help="verbose")
     parser.add_argument("--upsample", action="store_true")
     parser.add_argument("--weights", type=Path, default=None)
 
@@ -144,7 +132,6 @@ def main():
     args.backend_nms = int(S.get('backend_nms', 2))
     args.stereo = True
     args.depth = False
-    args.disable_vis = not args.verbose
 
     torch.multiprocessing.set_start_method('spawn')
 
@@ -160,6 +147,7 @@ def main():
         if droid is None:
             args.image_size = [image.shape[2], image.shape[3]]         
             droid = Droid(args)
+            time.sleep(5)
 
         droid.track(t, image, intrinsics=intrinsics)
 
