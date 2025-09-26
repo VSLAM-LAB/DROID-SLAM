@@ -15,7 +15,7 @@ setup(
         'droid_slam.configs': ['*.yaml'], 
     },
     include_package_data=True,
-    py_modules=['vslamlab_droidslam'],
+    py_modules=['vslamlab_droidslam_mono', 'vslamlab_droidslam_rgbd', 'vslamlab_droidslam_stereo'],
     packages=find_packages(where='.'),
     package_dir={
         'droid_slam': 'droid_slam',
