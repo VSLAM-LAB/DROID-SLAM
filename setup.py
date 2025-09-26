@@ -8,14 +8,14 @@ torch_include_dirs = include_paths()
 torch_library_dirs = library_paths()
 
 setup(
-    name='vslamlab_droidslam_mono',
+    name='vslamlab_droidslam',
     version='0.1',
-    description='DROID-SLAM mono mode',
+    description='DROID-SLAM',
     package_data={
         'droid_slam.configs': ['*.yaml'], 
     },
     include_package_data=True,
-    py_modules=['vslamlab_droidslam_mono'],
+    py_modules=['vslamlab_droidslam'],
     packages=find_packages(where='.'),
     package_dir={
         'droid_slam': 'droid_slam',
@@ -23,6 +23,8 @@ setup(
     entry_points={
         'console_scripts': [
             'vslamlab_droidslam_mono = vslamlab_droidslam_mono:main',
+            'vslamlab_droidslam_rgbd = vslamlab_droidslam_rgbd:main',
+            'vslamlab_droidslam_stereo = vslamlab_droidslam_stereo:main',
         ]
     },
     ext_modules=[
