@@ -58,7 +58,10 @@ def train(gpu, args):
         model.load_state_dict(torch.load(args.ckpt))
 
     # fetch dataloader
-    db = dataset_factory(['tartan'], datapath=args.datapath, n_frames=args.n_frames, fmin=args.fmin, fmax=args.fmax)
+    if 'TartanAir' in args.datapath:
+        db = dataset_factory(['tartan'], datapath=args.datapath, n_frames=args.n_frames, fmin=args.fmin, fmax=args.fmax)
+    else:
+        db = dataset_factory(['vslamlab'], datapath=args.datapath, n_frames=args.n_frames, fmin=args.fmin, fmax=args.fmax)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(
         db, shuffle=True, num_replicas=args.world_size, rank=gpu)

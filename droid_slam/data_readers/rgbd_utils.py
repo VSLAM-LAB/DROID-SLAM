@@ -111,7 +111,6 @@ def compute_distance_matrix_flow(poses, disps, intrinsics):
         intrinsics = torch.from_numpy(intrinsics).float().cuda()[None]
 
     N = poses.shape[1]
-    
     ii, jj = torch.meshgrid(torch.arange(N), torch.arange(N))
     ii = ii.reshape(-1).cuda()
     jj = jj.reshape(-1).cuda()
@@ -120,7 +119,8 @@ def compute_distance_matrix_flow(poses, disps, intrinsics):
     matrix = np.zeros((N, N), dtype=np.float32)
 
     s = 2048
-    for i in range(0, ii.shape[0], s):
+    from tqdm import tqdm
+    for i in tqdm(range(0, ii.shape[0], s), desc='compute_distance_matrix_flow'):
         flow1, val1 = pops.induced_flow(poses, disps, intrinsics, ii[i:i+s], jj[i:i+s])
         flow2, val2 = pops.induced_flow(poses, disps, intrinsics, jj[i:i+s], ii[i:i+s])
         
@@ -137,7 +137,6 @@ def compute_distance_matrix_flow(poses, disps, intrinsics):
         i1 = ii[i:i+s].cpu().numpy()
         j1 = jj[i:i+s].cpu().numpy()
         matrix[i1, j1] = mag.cpu().numpy()
-
     return matrix
 
 
