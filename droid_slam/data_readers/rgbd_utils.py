@@ -119,8 +119,9 @@ def compute_distance_matrix_flow(poses, disps, intrinsics):
     matrix = np.zeros((N, N), dtype=np.float32)
 
     s = 2048
-    from tqdm import tqdm
-    for i in tqdm(range(0, ii.shape[0], s), desc='compute_distance_matrix_flow'):
+    #from tqdm import tqdm
+    #for i in tqdm(range(0, ii.shape[0], s), desc='compute_distance_matrix_flow'):
+    for i in range(0, ii.shape[0], s):
         flow1, val1 = pops.induced_flow(poses, disps, intrinsics, ii[i:i+s], jj[i:i+s])
         flow2, val2 = pops.induced_flow(poses, disps, intrinsics, jj[i:i+s], ii[i:i+s])
         

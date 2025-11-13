@@ -18,7 +18,8 @@ test_split = open(test_split).read().split()
 class VSLAM_LAB(RGBDDataset):
 
     # scale depths to balance rot & trans
-    DEPTH_SCALE = 6553.5
+    DEPTH_SCALE = 5.0
+    DEPTH_SCALE_save = 1.0
 
     def __init__(self, mode='training', **kwargs):
         self.mode = mode
@@ -39,19 +40,17 @@ class VSLAM_LAB(RGBDDataset):
         #scenes = glob.glob(osp.join(self.root, '*/*/*/*'))
         scenes = glob.glob(osp.join(self.root, '*'))
 
-        print(scenes)
         for scene in tqdm(sorted(scenes)):
 
             #images = sorted(glob.glob(osp.join(scene, 'image_left/*.png')))
             images = sorted(
-                glob.glob(osp.join(scene, 'rgb_0/*.png')) +
-                glob.glob(osp.join(scene, 'rgb_0/*.jpg'))
+                glob.glob(osp.join(scene, 'rgb_0_resized/*.png')) +
+                glob.glob(osp.join(scene, 'rgb_0_resized/*.jpg'))
             )
 
             #depths = sorted(glob.glob(osp.join(scene, 'depth_left/*.npy')))
             depths = sorted(
-                glob.glob(osp.join(scene, 'depth_0/*.png')) +
-                glob.glob(osp.join(scene, 'depth_0/*.jpg'))
+                glob.glob(osp.join(scene, 'depth_0_npy/*.npy'))
             )
 
             #poses = np.loadtxt(osp.join(scene, 'pose_left.txt'), delimiter=' ')  
@@ -62,6 +61,7 @@ class VSLAM_LAB(RGBDDataset):
             poses_df = pd.read_csv(osp.join(scene, "groundtruth.csv"), engine='python', sep=None)
             cols = ['tx', 'ty', 'tz', 'qx', 'qy', 'qz', 'qw']
             poses = poses_df[cols].to_numpy()
+            poses[:, :3] /= VSLAM_LAB.DEPTH_SCALE # scale translation columns
             intrinsics = [VSLAM_LAB.calib_read()] * len(images)
 
             # graph of co-visible frames based on flow
@@ -75,7 +75,7 @@ class VSLAM_LAB(RGBDDataset):
 
     @staticmethod
     def calib_read():
-        return np.array([600.0, 600.0, 599.5, 339.5])
+        return np.array([368.0, 367.94, 367.6933, 208.1934])
 
     @staticmethod
     def image_read(image_file):
@@ -87,9 +87,10 @@ class VSLAM_LAB(RGBDDataset):
         # depth[depth==np.nan] = 1.0
         # depth[depth==np.inf] = 1.0
         # return depth
-        depth = cv2.imread(depth_file, cv2.IMREAD_UNCHANGED).astype(np.float32)
-        depth /= VSLAM_LAB.DEPTH_SCALE
+        depth = np.load(depth_file).astype(np.float32) #cv2.imread(depth_file, cv2.IMREAD_UNCHANGED).astype(np.float32)
+        depth /= (VSLAM_LAB.DEPTH_SCALE_save * VSLAM_LAB.DEPTH_SCALE)
         depth = np.nan_to_num(depth, nan=1.0, posinf=1.0, neginf=1.0)
+        depth[depth == 0] = 1.0
         return depth
 
 
@@ -100,7 +101,7 @@ class VSLAM_LAB_Stream(RGBDStream):
     def _build_dataset_index(self):
         """ build list of images, poses, depths, and intrinsics """
         self.root = 'datasets/TartanAir'
-
+        
         scene = osp.join(self.root, self.datapath)
         image_glob = osp.join(scene, 'image_left/*.png')
         images = sorted(glob.glob(image_glob))
@@ -121,7 +122,7 @@ class VSLAM_LAB_Stream(RGBDStream):
 
     @staticmethod
     def calib_read(datapath):
-        return np.array([600.0, 600.0, 599.5, 339.5])
+        return np.array([368.0, 367.94, 367.6933, 208.1934])
 
     @staticmethod
     def image_read(image_file):
@@ -154,7 +155,7 @@ class VSLAM_LAB_TestStream(RGBDStream):
 
     @staticmethod
     def calib_read(datapath):
-        return np.array([600.0, 600.0, 599.5, 339.5])
+        return np.array([368.0, 367.94, 367.6933, 208.1934])
 
     @staticmethod
     def image_read(image_file):
